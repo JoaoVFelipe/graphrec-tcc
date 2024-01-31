@@ -11,6 +11,10 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
 warnings.filterwarnings('ignore')
 
+
+POSITIVE_VALUE = 5
+NEGATIVE_VALUE = 1
+
 ####### FUNÇÕES CITEULIKE ####### 
 def get_citeulike_raw():
     colnames=['doc.id', 'title', 'citeulike.id', 'raw.title', 'raw.abstract'] 
@@ -81,11 +85,11 @@ def get_data_citeulike(dataset, perc=0.9):
     df_train = df[0:split_index]
     df_test = df[split_index:].reset_index(drop=True)
 
-    test_p = len(df_test[df_test["rate"]==1])
-    test_n = len(df_test[df_test["rate"]==0])
+    test_p = len(df_test[df_test["rate"]==POSITIVE_VALUE])
+    test_n = len(df_test[df_test["rate"]==NEGATIVE_VALUE])
 
-    train_p = len(df_train[df_train["rate"]==1])
-    train_n = len(df_train[df_train["rate"]==0])
+    train_p = len(df_train[df_train["rate"]==POSITIVE_VALUE])
+    train_n = len(df_train[df_train["rate"]==NEGATIVE_VALUE])
 
     print("ITENS POSITIVOS EM TESTE: ", test_p)
     print("ITENS POSITIVOS EM TREINO: ", train_p)
@@ -143,8 +147,7 @@ for ind in df_user_item.index:
 df_ratings = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
 
 ### Redução de dimensionalidade, se desejado
-df_ratings = reduce_dimensionality(df_ratings, 1000, 5000)
-df_ratings_sample = df_ratings
+df_ratings_sample = reduce_dimensionality(df_ratings, 1000, 5000)
 del df_ratings
 
 docs = df_ratings_sample['item'].unique()
@@ -156,31 +159,35 @@ print("Usuário e documentos finais:", users.size, docs.size)
 count = 0
 
 print("Adicionando itens não explicitos a matriz...")
+count = 0
 ### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
-
 NEGATIVE_RATIO = 10
 for ind in users:
-    neg_counter = 0
     user_id = ind
-    user_ratings = list(map(int, df_user_item[0][ind].split()))
+    user_ratings = list(map(int, df_ratings_sample.loc[df_ratings_sample['user'] == user_id, 'item']))
+    negative_docs = [doc for doc in docs if doc not in user_ratings]
+
     # print("Process nr. ", count," ### User -- ", ind, "with", len(user_ratings), "items")
-    for doc_id in random.shufle(docs):
-        if(doc_id in user_ratings):
-            user_rating = [user_id, doc_id, 1]
-            rows_list.append(user_rating)
-        elif neg_counter <= NEGATIVE_RATIO:
-            user_rating = [user_id, doc_id, 0]
-            rows_list.append(user_rating)
-            neg_counter = neg_counter+1
-        else:
-            break
+
+    ### Adiciona todos os itens positivos a lista
+    for positive_doc in user_ratings:  
+        user_rating = [user_id, positive_doc, 1]
+        # print("Positive docs", positive_doc)
+        rows_list.append(user_rating)
+        ### Para cada item positivo, pega uma quantidade negativa baseado no ratio 1:NEGATIVE RATIO
+        negative_list = random.sample(negative_docs, NEGATIVE_RATIO)
+        # print("Negative docs", negative_list)
+        for negative_doc in negative_list:
+            negative_user_rating = [user_id, negative_doc, 0]
+            rows_list.append(negative_user_rating)
     count = count+1
 
 ### Dataset completo
 print("Processamento completo. Criando dataframe com ", len(rows_list), " items.")
+### Substitui os valores de 0 e 1 para valores mais compreensiveis pelo graphrec
 df_ratings_complete = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
-df_ratings_complete.loc[df_ratings_complete['rate'] == 1, 'rate'] = 2
-df_ratings_complete.loc[df_ratings_complete['rate'] == 0, 'rate'] = 1
+df_ratings_complete.loc[df_ratings_complete['rate'] == 1, 'rate'] = POSITIVE_VALUE
+df_ratings_complete.loc[df_ratings_complete['rate'] == 0, 'rate'] = NEGATIVE_VALUE
 
 # random_sampling = df_ratings_complete.groupby("rate").sample(n=14000, random_state=42)
 

@@ -133,8 +133,8 @@ def GraphRec(train, test,ItemData=False,UserData=False,Graph=False,Dataset='100k
     for index, row in train.iterrows():
       userid=int(row['user'])
       itemid=int(row['item'])
-      AdjacencyUsers[userid][itemid]=row['rate']/2.0
-      AdjacencyItems[itemid][userid]=row['rate']/2.0
+      AdjacencyUsers[userid][itemid]=row['rate']/5.0
+      AdjacencyItems[itemid][userid]=row['rate']/5.0
       DegreeUsers[userid][0]+=1
       DegreeItems[itemid][0]+=1
     
