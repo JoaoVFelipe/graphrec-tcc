@@ -53,11 +53,12 @@ def queries_ndcg(y_true, y_score, qids, k = 10):
                                 dtype=np.object)
 
     n_queries = check_qids(qids)
-
     queries_ndcg = np.zeros(n_queries)
+
+    result_list = []
 
     for qidx, (qid, a, b, _) in enumerate(query_groups):
         # scores = model.predict(X.iloc[a:b])
         queries_ndcg[qidx] = ndcg(y_true.iloc[a:b], y_score[a:b], k)
-
-    return queries_ndcg
+        result_list[qidx] = [qidx, y_true.iloc[a:b],  y_score[a:b]]
+    return queries_ndcg, result_list

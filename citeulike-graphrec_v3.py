@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 import random
-from sklearn.metrics import mean_squared_error
+from os.path import exists
+
+from sklearn.metrics import mean_squared_error, average_precision_score
 from utils.graphrec import GraphRec, get_data100k
 from utils.metrics import queries_ndcg
 
@@ -99,7 +101,7 @@ def get_data_citeulike(dataset, perc=0.9):
 
     return df_train, df_test
 
-def reduce_dimensionality(df_ratings, MAX_USERS_DESIRED = 1000, MAX_ITEMS_DESIRED = 10000):
+def reduce_dimensionality(df_ratings, MAX_USERS_DESIRED = 1000, MAX_ITEMS_DESIRED = 5000):
     print("Reduzindo dimensionalidade")
     print("Tamanho inicial --- ", df_ratings.size)
     index_max_user = df_ratings.loc[df_ratings.user==MAX_USERS_DESIRED].index[0]
@@ -131,71 +133,80 @@ def get_data100k():
     df_test = df[split_index:].reset_index(drop=True)
     return df_train, df_test
 
-print("Iniciando script...")
-print("Carregando dataset principal...")
-df_user_item = pd.read_csv('./data/citeulike/users.dat', header=None)
-### Transformar essa lista em uma matriz de conexão
-print("Criando matriz de conexão...")
+def pre_process_dataset():
+    print("Iniciando script...")
+    print("Carregando dataset principal...")
+    df_user_item = pd.read_csv('./data/citeulike/users.dat', header=None)
+    ### Transformar essa lista em uma matriz de conexão
+    print("Criando matriz de conexão...")
 
-rows_list = []
-for ind in df_user_item.index:
-    user_id = ind
-    user_ratings = list(map(int, df_user_item[0][ind].split()))
-    for rating in user_ratings:
-        user_rating = [user_id, rating, 1]
-        rows_list.append(user_rating)
-df_ratings = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
+    rows_list = []
+    for ind in df_user_item.index:
+        user_id = ind
+        user_ratings = list(map(int, df_user_item[0][ind].split()))
+        for rating in user_ratings:
+            user_rating = [user_id, rating, 1]
+            rows_list.append(user_rating)
+    df_ratings = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
 
-### Redução de dimensionalidade, se desejado
-df_ratings_sample = reduce_dimensionality(df_ratings, 1000, 10000)
-del df_ratings
+    ### Redução de dimensionalidade, se desejado
+    df_ratings_sample = reduce_dimensionality(df_ratings, 1000, 10000)
+    del df_ratings
 
-docs = df_ratings_sample['item'].unique()
-users = df_ratings_sample['user'].unique()
-rows_list = []
-##df_ratings_complete = df_ratings_complete.iloc[0:0]
+    docs = df_ratings_sample['item'].unique()
+    users = df_ratings_sample['user'].unique()
+    rows_list = []
+    ##df_ratings_complete = df_ratings_complete.iloc[0:0]
 
-print("Usuário e documentos finais:", users.size, docs.size)
-count = 0
+    print("Usuário e documentos finais:", users.size, docs.size)
+    count = 0
 
-print("Adicionando itens não explicitos a matriz...")
-count = 0
-### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
-NEGATIVE_RATIO = 10
-for ind in users:
-    user_id = ind
-    user_ratings = list(map(int, df_ratings_sample.loc[df_ratings_sample['user'] == user_id, 'item']))
-    negative_docs = [doc for doc in docs if doc not in user_ratings]
+    print("Adicionando itens não explicitos a matriz...")
+    count = 0
+    ### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
+    NEGATIVE_RATIO = 10
+    for ind in users:
+        user_id = ind
+        user_ratings = list(map(int, df_ratings_sample.loc[df_ratings_sample['user'] == user_id, 'item']))
+        negative_docs = [doc for doc in docs if doc not in user_ratings]
+        # print("Process nr. ", count," ### User -- ", ind, "with", len(user_ratings), "items")
+        ### Adiciona todos os itens positivos a lista
+        for positive_doc in user_ratings:  
+            user_rating = [user_id, positive_doc, 1]
+            # print("Positive docs", positive_doc)
+            rows_list.append(user_rating)
+            ### Para cada item positivo, pega uma quantidade negativa baseado no ratio 1:NEGATIVE RATIO
+            negative_list = random.sample(negative_docs, NEGATIVE_RATIO)
+            # print("Negative docs", negative_list)
+            for negative_doc in negative_list:
+                negative_user_rating = [user_id, negative_doc, 0]
+                rows_list.append(negative_user_rating)
+        count = count+1
 
-    # print("Process nr. ", count," ### User -- ", ind, "with", len(user_ratings), "items")
+    ### Dataset completo
+    print("Processamento completo. Criando dataframe com ", len(rows_list), " items.")
+    ### Substitui os valores de 0 e 1 para valores mais compreensiveis pelo graphrec
+    df_ratings_complete = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
+    df_ratings_complete.loc[df_ratings_complete['rate'] == 1, 'rate'] = POSITIVE_VALUE
+    df_ratings_complete.loc[df_ratings_complete['rate'] == 0, 'rate'] = NEGATIVE_VALUE
+    # random_sampling = df_ratings_complete.groupby("rate").sample(n=14000, random_state=42)
+    print("Limpando dados...")
+    del rows_list
+    del docs
+    del users
+    del df_ratings_sample
+    return df_ratings_complete
 
-    ### Adiciona todos os itens positivos a lista
-    for positive_doc in user_ratings:  
-        user_rating = [user_id, positive_doc, 1]
-        # print("Positive docs", positive_doc)
-        rows_list.append(user_rating)
-        ### Para cada item positivo, pega uma quantidade negativa baseado no ratio 1:NEGATIVE RATIO
-        negative_list = random.sample(negative_docs, NEGATIVE_RATIO)
-        # print("Negative docs", negative_list)
-        for negative_doc in negative_list:
-            negative_user_rating = [user_id, negative_doc, 0]
-            rows_list.append(negative_user_rating)
-    count = count+1
 
-### Dataset completo
-print("Processamento completo. Criando dataframe com ", len(rows_list), " items.")
-### Substitui os valores de 0 e 1 para valores mais compreensiveis pelo graphrec
-df_ratings_complete = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
-df_ratings_complete.loc[df_ratings_complete['rate'] == 1, 'rate'] = POSITIVE_VALUE
-df_ratings_complete.loc[df_ratings_complete['rate'] == 0, 'rate'] = NEGATIVE_VALUE
+### Check if pre processed dataset is already saved
+preprocessed_path = 'pre_processed_dataset.csv'
+file_exists = exists(preprocessed_path)
 
-# random_sampling = df_ratings_complete.groupby("rate").sample(n=14000, random_state=42)
-
-print("Limpando dados...")
-del rows_list
-del docs
-del users
-del df_ratings_sample
+if(not file_exists):
+    df_ratings_complete = pre_process_dataset()
+    df_ratings_complete.to_csv(preprocessed_path)
+else:
+    df_ratings_complete = pd.read_csv(preprocessed_path)
 
 #### Primeira execução sem informações dos artigos:
 print("------------- Primeira execução: Sem informações adicionais dos artigos: ---------------")
@@ -209,10 +220,15 @@ y_test = df_test['rate'] # y_test sao os scores verdadeiros do teste
 predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test) 
 
 print("Resultados Primeira Execução: ")
-ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
+ndcgs, result_list = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
 print("MEAN NDCGS:", ndcgs.mean())
 rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
 print("RMSE:", rmse)
+mean_ap = average_precision_score(y_test, predictions)
+print("MAP:", mean_ap)
+
+results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
+results_ndcg.to_csv('results_noadd.csv')
 print("------------- Execução finalizada ---------------")
 
 
@@ -228,8 +244,13 @@ predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test
 print("Resultados Segunda Execução: ")
 print("Primeiras 10 predições: " , predictions[:10])
 print("Primeiros 10 items: " , y_test[:10])
-ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
+ndcgs, result_list = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
 print("MEAN NDCGS:", ndcgs.mean())
 rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
 print("RMSE:", rmse)
+mean_ap = average_precision_score(y_test, predictions)
+print("MAP:", mean_ap)
+
+results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
+results_ndcg.to_csv('results_addinfo.csv')
 print("------------- Execução finalizada ---------------")
