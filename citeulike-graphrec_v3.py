@@ -5,7 +5,7 @@ from os.path import exists
 
 from sklearn.metrics import mean_squared_error, average_precision_score
 from utils.graphrec import GraphRec, get_data100k
-from utils.metrics import queries_ndcg
+from utils.metrics import queries_ndcg, mean_ap
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
@@ -16,6 +16,9 @@ warnings.filterwarnings('ignore')
 
 POSITIVE_VALUE = 5
 NEGATIVE_VALUE = 1
+
+USER_NUM=1000
+ITEM_NUM=6000
 
 ####### FUNÇÕES CITEULIKE ####### 
 def get_citeulike_raw():
@@ -101,7 +104,7 @@ def get_data_citeulike(dataset, perc=0.9):
 
     return df_train, df_test
 
-def reduce_dimensionality(df_ratings, MAX_USERS_DESIRED = 1000, MAX_ITEMS_DESIRED = 5000):
+def reduce_dimensionality(df_ratings, MAX_USERS_DESIRED = USER_NUM, MAX_ITEMS_DESIRED = ITEM_NUM):
     print("Reduzindo dimensionalidade")
     print("Tamanho inicial --- ", df_ratings.size)
     index_max_user = df_ratings.loc[df_ratings.user==MAX_USERS_DESIRED].index[0]
@@ -150,7 +153,7 @@ def pre_process_dataset():
     df_ratings = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
 
     ### Redução de dimensionalidade, se desejado
-    df_ratings_sample = reduce_dimensionality(df_ratings, 1000, 10000)
+    df_ratings_sample = reduce_dimensionality(df_ratings, USER_NUM, ITEM_NUM)
     del df_ratings
 
     docs = df_ratings_sample['item'].unique()
@@ -164,7 +167,7 @@ def pre_process_dataset():
     print("Adicionando itens não explicitos a matriz...")
     count = 0
     ### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
-    NEGATIVE_RATIO = 10
+    NEGATIVE_RATIO = 50
     for ind in users:
         user_id = ind
         user_ratings = list(map(int, df_ratings_sample.loc[df_ratings_sample['user'] == user_id, 'item']))
@@ -176,12 +179,13 @@ def pre_process_dataset():
             # print("Positive docs", positive_doc)
             rows_list.append(user_rating)
             ### Para cada item positivo, pega uma quantidade negativa baseado no ratio 1:NEGATIVE RATIO
+            random.seed(count)
             negative_list = random.sample(negative_docs, NEGATIVE_RATIO)
             # print("Negative docs", negative_list)
             for negative_doc in negative_list:
                 negative_user_rating = [user_id, negative_doc, 0]
                 rows_list.append(negative_user_rating)
-        count = count+1
+            count = count+1
 
     ### Dataset completo
     print("Processamento completo. Criando dataframe com ", len(rows_list), " items.")
@@ -199,7 +203,7 @@ def pre_process_dataset():
 
 
 ### Check if pre processed dataset is already saved
-preprocessed_path = 'pre_processed_dataset.csv'
+preprocessed_path = 'preprocess/pre_processed_dataset-1000:5000.csv'
 file_exists = exists(preprocessed_path)
 
 if(not file_exists):
@@ -211,7 +215,7 @@ else:
 #### Primeira execução sem informações dos artigos:
 print("------------- Primeira execução: Sem informações adicionais dos artigos: ---------------")
 df_train, df_test = get_data_citeulike(df_ratings_complete)
-model = GraphRec(df_train, df_test, ItemData=False, UserData = False, Graph=True, Dataset='citeU') 
+model = GraphRec(df_train, df_test, ItemData=False, UserData = False, Graph=True, Dataset='citeU', USER_NUM=USER_NUM, ITEM_NUM=ITEM_NUM) 
 print("------------- Execução finalizada ---------------")
 print("Execução da predição para teste")
 df_test = df_test.sort_values('user') # retorna o dataset de treino ordenado com base nos ids
@@ -220,22 +224,20 @@ y_test = df_test['rate'] # y_test sao os scores verdadeiros do teste
 predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test) 
 
 print("Resultados Primeira Execução: ")
-ndcgs, result_list = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
+ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
 print("MEAN NDCGS:", ndcgs.mean())
 rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
 print("RMSE:", rmse)
-mean_ap = average_precision_score(y_test, predictions)
-print("MAP:", mean_ap)
-
-results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
-results_ndcg.to_csv('results_noadd.csv')
+map_res = mean_ap(y_test, predictions, qids, 5.0)
+print("MAP:", map_res)
+# results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
+# results_ndcg.to_csv('results/results_noadd.csv')
 print("------------- Execução finalizada ---------------")
-
 
 #### Segunda execução: Com informações dos artigos:
 print("------------- Segunda execução: Com informações adicionais dos artigos: ---------------")
 df_train, df_test = get_data_citeulike(df_ratings_complete)
-model = GraphRec(df_train, df_test, ItemData=True, UserData = False, Graph=True, Dataset='citeU')
+model = GraphRec(df_train, df_test, ItemData=True, UserData = False, Graph=True, Dataset='citeU', USER_NUM=USER_NUM, ITEM_NUM=ITEM_NUM)
 print("Execução da predição para teste")
 df_test = df_test.sort_values('user') # retorna o dataset de treino ordenado com base nos ids
 qids = df_test['user'] # qids sao os ids dos usuarios
@@ -244,13 +246,12 @@ predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test
 print("Resultados Segunda Execução: ")
 print("Primeiras 10 predições: " , predictions[:10])
 print("Primeiros 10 items: " , y_test[:10])
-ndcgs, result_list = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
+ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
 print("MEAN NDCGS:", ndcgs.mean())
 rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
 print("RMSE:", rmse)
-mean_ap = average_precision_score(y_test, predictions)
-print("MAP:", mean_ap)
-
-results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
-results_ndcg.to_csv('results_addinfo.csv')
+map_res = mean_ap(y_test, predictions, qids, 5.0)
+print("MAP:", map_res)
+# results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
+# results_ndcg.to_csv('results/results_addinfo.csv')
 print("------------- Execução finalizada ---------------")

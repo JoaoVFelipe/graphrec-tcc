@@ -113,9 +113,10 @@ def optimizationSparse(infer, regularizer, rate_batch, learning_rate=0.0005, reg
 def clip(x):
     return np.clip(x, 1.0, 5.0)
 
-
+USER_NUM = 1000
+ITEM_NUM = 10000
   
-def GraphRec(train, test,ItemData=False,UserData=False,Graph=False,Dataset='100k'):
+def GraphRec(train, test,ItemData=False,UserData=False,Graph=False,Dataset='100k', USER_NUM=USER_NUM, ITEM_NUM=ITEM_NUM):
 
     AdjacencyUsers = np.zeros((USER_NUM,ITEM_NUM), dtype=np.float32) #np.asarray([[0 for x in range(ITEM_NUM)] for y in range(USER_NUM)],dtype=np.float16)
     DegreeUsers = np.zeros((USER_NUM,1), dtype=np.float32)# np.asarray([[0 for x in range(1)] for y in range(USER_NUM)],dtype=np.float16)
@@ -470,8 +471,6 @@ DEVICE="/cpu:0"
 
 BATCH_SIZE = 1000
 PERC = 0.9
-USER_NUM = 1000
-ITEM_NUM = 10000
 # df_train, df_test = get_data100k()
 
 #With Graph Feature w external features

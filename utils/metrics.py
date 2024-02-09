@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.metrics import average_precision_score
 
 def dcg(y_true, y_score, k=10):
     order = np.argsort(y_score)[::-1]
@@ -55,10 +56,21 @@ def queries_ndcg(y_true, y_score, qids, k = 10):
     n_queries = check_qids(qids)
     queries_ndcg = np.zeros(n_queries)
 
-    result_list = []
-
     for qidx, (qid, a, b, _) in enumerate(query_groups):
         # scores = model.predict(X.iloc[a:b])
         queries_ndcg[qidx] = ndcg(y_true.iloc[a:b], y_score[a:b], k)
-        result_list[qidx] = [qidx, y_true.iloc[a:b],  y_score[a:b]]
-    return queries_ndcg, result_list
+        # result_list[qidx] = [[qidx], np.array(y_true.iloc[a:b]).flatten(),  np.array(y_score[a:b]).flatten()]
+    return queries_ndcg
+
+def mean_ap(y_true, y_score, qids, positive_value):
+    query_groups = np.array([(qid, a, b, np.arange(a, b))
+                                 for qid, a, b in get_groups(qids)],
+                                dtype=np.object)
+
+    n_queries = check_qids(qids)
+    mean_average_list = np.zeros(n_queries)
+
+    for qidx, (qid, a, b, _) in enumerate(query_groups):
+        mean_average_list[qidx] = average_precision_score(y_true.iloc[a:b], y_score[a:b], pos_label=positive_value)
+    mean_ap = sum(mean_average_list) / len(mean_average_list)
+    return mean_ap
