@@ -474,8 +474,8 @@ PERC = 0.9
 # df_train, df_test = get_data100k()
 
 #With Graph Feature w external features
-MFSIZE=40
-UW=0.08
-IW=0.06
-LR=0.0002
-EPOCH_MAX = 200
+MFSIZE=50
+UW=0.05
+IW=0.02
+LR=0.002
+EPOCH_MAX = 150

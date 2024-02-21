@@ -165,10 +165,10 @@ def pre_process_dataset():
     count = 0
 
     print("Adicionando itens não explicitos a matriz...")
-    count = 0
     ### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
     NEGATIVE_RATIO = 50
     for ind in users:
+        count = 0
         user_id = ind
         user_ratings = list(map(int, df_ratings_sample.loc[df_ratings_sample['user'] == user_id, 'item']))
         negative_docs = [doc for doc in docs if doc not in user_ratings]
@@ -221,37 +221,46 @@ print("Execução da predição para teste")
 df_test = df_test.sort_values('user') # retorna o dataset de treino ordenado com base nos ids
 qids = df_test['user'] # qids sao os ids dos usuarios
 y_test = df_test['rate'] # y_test sao os scores verdadeiros do teste
-predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test) 
+predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test)
+
+result_df = df_test.copy(deep=True)
+result_df = result_df.assign(prediction=predictions)
 
 print("Resultados Primeira Execução: ")
 ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
 print("MEAN NDCGS:", ndcgs.mean())
 rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
 print("RMSE:", rmse)
-map_res = mean_ap(y_test, predictions, qids, 5.0)
+map_res = mean_ap(result_df, 5.0)
 print("MAP:", map_res)
-# results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
-# results_ndcg.to_csv('results/results_noadd.csv')
-print("------------- Execução finalizada ---------------")
 
-#### Segunda execução: Com informações dos artigos:
-print("------------- Segunda execução: Com informações adicionais dos artigos: ---------------")
-df_train, df_test = get_data_citeulike(df_ratings_complete)
-model = GraphRec(df_train, df_test, ItemData=True, UserData = False, Graph=True, Dataset='citeU', USER_NUM=USER_NUM, ITEM_NUM=ITEM_NUM)
-print("Execução da predição para teste")
-df_test = df_test.sort_values('user') # retorna o dataset de treino ordenado com base nos ids
-qids = df_test['user'] # qids sao os ids dos usuarios
-y_test = df_test['rate'] # y_test sao os scores verdadeiros do teste
-predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test) 
-print("Resultados Segunda Execução: ")
-print("Primeiras 10 predições: " , predictions[:10])
-print("Primeiros 10 items: " , y_test[:10])
-ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
-print("MEAN NDCGS:", ndcgs.mean())
-rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
-print("RMSE:", rmse)
-map_res = mean_ap(y_test, predictions, qids, 5.0)
-print("MAP:", map_res)
-# results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
-# results_ndcg.to_csv('results/results_addinfo.csv')
-print("------------- Execução finalizada ---------------")
+
+# # results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
+# # results_ndcg.to_csv('results/results_noadd.csv')
+# print("------------- Execução finalizada ---------------")
+
+# #### Segunda execução: Com informações dos artigos:
+# print("------------- Segunda execução: Com informações adicionais dos artigos: ---------------")
+# df_train, df_test = get_data_citeulike(df_ratings_complete)
+# model = GraphRec(df_train, df_test, ItemData=True, UserData = False, Graph=True, Dataset='citeU', USER_NUM=USER_NUM, ITEM_NUM=ITEM_NUM)
+# print("Execução da predição para teste")
+# df_test = df_test.sort_values('user') # retorna o dataset de treino ordenado com base nos ids
+# qids = df_test['user'] # qids sao os ids dos usuarios
+# y_test = df_test['rate'] # y_test sao os scores verdadeiros do teste
+# predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test) 
+
+# result_df = df_test.copy(deep=True)
+# result_df = result_df.assign(prediction=predictions)
+
+# print("Resultados Segunda Execução: ")
+# print("Primeiras 10 predições: " , predictions[:10])
+# print("Primeiros 10 items: " , y_test[:10])
+# ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de cada query (que seria id de cada usuario)
+# print("MEAN NDCGS:", ndcgs.mean())
+# rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
+# print("RMSE:", rmse)
+# map_res = mean_ap(result_df, 5.0)
+# print("MAP:", map_res)
+# # results_ndcg = pd.DataFrame(columns=['user', 'real_values', 'predicted_values'], data=result_list)
+# # results_ndcg.to_csv('results/results_addinfo.csv')
+# print("------------- Execução finalizada ---------------")
