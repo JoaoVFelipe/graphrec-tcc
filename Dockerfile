@@ -12,4 +12,4 @@ RUN pip install -r ./requirements.txt
 #CMD instruction should be used to run the software
 #contained by your image, along with any arguments.
 # CMD [ "python", "-u", "./citeulike-graphrec.py"]
-CMD [ "python", "-u", "./citeulike-graphrec_v3.py"]
+ENTRYPOINT  [ "python", "-u", "./citeulike-graphrec.py"]
