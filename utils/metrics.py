@@ -94,7 +94,7 @@ def mean_ap(result_df, positive_value):
     for user_id in groupby_user.groups.keys():
         user_df = groupby_user.get_group(user_id)
 
-        relevant_itens = user_df.loc[user_df['rate'] == positive_value]['item']
+        relevant_itens = user_df.loc[user_df['rate'] >= positive_value]['item']
         predictions = user_df.sort_values(by='prediction', ascending=False)
         ap = calculate_ap(predictions['item'], relevant_itens)
         map_values.append(ap)

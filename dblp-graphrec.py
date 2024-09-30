@@ -4,6 +4,8 @@ import random
 from os.path import exists
 
 from sklearn.metrics import mean_squared_error
+from sklearn.utils import shuffle
+
 from utils.graphrec_automated import GraphRec
 from utils.metrics import queries_ndcg, mean_ap
 
@@ -17,8 +19,8 @@ warnings.filterwarnings('ignore')
 POSITIVE_VALUE = 5
 NEGATIVE_VALUE = 1
 
-USER_NUM=3000
-ITEM_NUM=10000
+USER_NUM=5000
+ITEM_NUM=15000
 
 def get_dataset(dataset, perc=0.9):
     rows = len(dataset)
@@ -70,13 +72,7 @@ def pre_process_dataset():
     df_ratings_sample = reduce_dimensionality(df_ratings, USER_NUM, ITEM_NUM)
     #df_ratings_sample = df_ratings
     del df_ratings
-
-    docs = df_ratings_sample['item'].unique()
-    users = df_ratings_sample['user'].unique()
-    rows_list = []
     ##df_ratings_complete = df_ratings_complete.iloc[0:0]
-
-    print("Usuário e documentos finais:", users.size, docs.size)
     # count = 0
     #print("Adicionando itens não explicitos a matriz...")
     ### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
@@ -110,9 +106,6 @@ def pre_process_dataset():
     # df_ratings_complete.loc[df_ratings_complete['rate'] == 0, 'rate'] = NEGATIVE_VALUE
     # random_sampling = df_ratings_complete.groupby("rate").sample(n=14000, random_state=42)
     print("Limpando dados...")
-    del rows_list
-    del docs
-    del users
     del df_ratings_sample
     return df_ratings_complete
 
@@ -181,11 +174,60 @@ best_ir = 0.01
 best_mfsize = 100
 #### Primeira execução sem informações dos artigos:
 
-## Parâmetros melhores encontrados:
-## LR ---  0.001 || UR ---  0.1 || IR ---  0.01 || MF_SIZE ---  100
+
+#### Primeira execução sem informações dos artigos:
 df_train, df_test = get_dataset(df_ratings_complete)
+docs = df_ratings_complete['item'].unique()
+
+### Adiciona opções negativas na base de treino
+NEGATIVE_RATIO = 50
+
+negative_ratings = []
+for user in df_train['user'].unique():
+    # Itens avaliados pelo usuário
+    user_items = df_train[df_train['user'] == user]['item'].values
+    # Itens que não foram avaliados pelo usuário
+    non_user_items = list(set(docs).difference(user_items))
+    
+    # Para cada rating positivo do usuário
+    for item in user_items:
+        # Selecionar x itens não avaliados aleatoriamente
+        sampled_negative_items = np.random.choice(non_user_items, size=NEGATIVE_RATIO, replace=False)
+        for neg_item in list(sampled_negative_items):
+            negative_ratings.append({'user': user, 'item': neg_item, 'rate': 0})
+
+df_negative = pd.DataFrame(negative_ratings)
+# Combinar os ratings positivos e negativos
+df_train_final = pd.concat([df_train, df_negative]).reset_index(drop=True)
+df_train_final = shuffle(df_train_final).reset_index(drop=True)
+
+### Adiciona uma opção negativa para cada positiva na base de testes: 
+test_users = df_test['user'].unique()
+
+negative_ratings = []
+print("Adicionando itens não explicitos a matriz de testes...")
+### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
+# NEGATIVE_RATIO = 50
+for user in df_test['user'].unique():
+    # Itens avaliados pelo usuário
+    user_items = df_test[df_test['user'] == user]['item'].values
+    # Itens que não foram avaliados pelo usuário
+    non_user_items = list(set(docs).difference(user_items))
+    
+    # Para cada rating positivo do usuário
+    for item in user_items:
+        # Selecionar x itens não avaliados aleatoriamente
+        sampled_negative_items = np.random.choice(non_user_items, size=1, replace=False)
+        negative_ratings.append({'user': user, 'item': list(sampled_negative_items)[0], 'rate': 0})
+
+df_negative = pd.DataFrame(negative_ratings)
+# Combinar os ratings positivos e negativos
+df_test_final = pd.concat([df_test, df_negative]).reset_index(drop=True)
+# Embaralhar o dataframe final
+df_test_final = shuffle(df_test_final).reset_index(drop=True)
+
 print("------------- Execução com os melhores parâmetros: Sem informações adicionais dos artigos: ---------------")
-model = GraphRec(df_train, df_test, ItemData=False, UserData = False, Graph=False, Dataset='DBLP', USER_NUM=USER_NUM, ITEM_NUM=ITEM_NUM, 
+model = GraphRec(df_train_final, df_test_final, ItemData=False, UserData = False, Graph=False, Dataset='DBLP', USER_NUM=USER_NUM, ITEM_NUM=ITEM_NUM, 
             MFSIZE=best_mfsize,
             UW=best_ur,
             IW=best_ir,
@@ -193,12 +235,12 @@ model = GraphRec(df_train, df_test, ItemData=False, UserData = False, Graph=Fals
             EPOCH_MAX = 400,
             BATCH_SIZE = 1000) 
 print("Execução da predição para teste")
-df_test = df_test.sort_values('user') # retorna o dataset de treino ordenado com base nos ids
-qids = df_test['user'] # qids sao os ids dos usuarios
-y_test = df_test['rate'] # y_test sao os scores verdadeiros do teste
-predictions = np.array(model.predict(df_test)).flatten() # model.predict(df_test)
+df_test_final = df_test_final.sort_values('user') # retorna o dataset de treino ordenado com base nos ids
+qids = df_test_final['user'] # qids sao os ids dos usuarios
+y_test = df_test_final['rate'] # y_test sao os scores verdadeiros do teste
+predictions = np.array(model.predict(df_test_final)).flatten() # model.predict(df_test)
 
-result_df = df_test.copy(deep=True)
+result_df = df_test_final.copy(deep=True)
 result_df = result_df.assign(prediction=predictions)
 
 print("Resultados Primeira Execução: ")
@@ -206,9 +248,10 @@ ndcgs = queries_ndcg(y_test, predictions, qids) # retorna uma lista com ndcg de 
 print("MEAN NDCGS:", ndcgs.mean())
 rmse = mean_squared_error(y_test, predictions, squared = False) # retorna a raiz quadradica do erro-medio
 print("RMSE:", rmse)
-map_res = mean_ap(result_df, 1)
+map_res = mean_ap(result_df, 1.0)
 print("MAP:", map_res)
 print("------------- Execução finalizada ---------------")
+
 
 
 #### Segunda execução: Com informações dos artigos:

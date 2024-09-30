@@ -107,6 +107,9 @@ def optimization(infer, regularizer, rate_batch, learning_rate=0.0005, reg=0.1):
 #     train_op = tf.train.AdamOptimizer(learning_rate).minimize(cost, global_step=global_step)
 #     return cost, train_op
 
+def org_clip(x):
+    return np.clip(x, 0.0, 5.0)
+
 def clip(x):
     return np.clip(x, 0.0, 1.0)
 
@@ -125,7 +128,8 @@ def GraphRec(train, test,
              IW=0.02,
              LR=0.002,
              EPOCH_MAX = 150,
-             BATCH_SIZE = 100):
+             BATCH_SIZE = 100,
+             orig_graphrec=False):
     
     print("----------- Starting training -----------")
     print("Parameters -----------")
@@ -139,8 +143,12 @@ def GraphRec(train, test,
     for index, row in train.iterrows():
       userid=int(row['user'])
       itemid=int(row['item'])
-      AdjacencyUsers[userid][itemid]=row['rate']
-      AdjacencyItems[itemid][userid]=row['rate']
+      if(orig_graphrec): 
+        AdjacencyUsers[userid][itemid]=row['rate']/5.0
+        AdjacencyItems[itemid][userid]=row['rate']/5.0
+      else: 
+        AdjacencyUsers[userid][itemid]=row['rate']
+        AdjacencyItems[itemid][userid]=row['rate']
       DegreeUsers[userid][0]+=1
       DegreeItems[itemid][0]+=1
     
@@ -219,7 +227,10 @@ def GraphRec(train, test,
                                                                    item_batch: items,
                                                                    rate_batch: rates,
                                                                    phase:True})
-            pred_batch = clip(pred_batch)
+            if(orig_graphrec): 
+                pred_batch = org_clip(pred_batch)
+            else: 
+                pred_batch = clip(pred_batch)
             errors.append(np.power(pred_batch - rates, 2))
             if i % samples_per_batch == 0:
                 train_err = np.sqrt(np.mean(errors))
@@ -231,7 +242,10 @@ def GraphRec(train, test,
                                                             item_batch: items,                                                                                             
                                                             phase:False})
 
-                    pred_batch = clip(pred_batch)            
+                    if(orig_graphrec): 
+                        pred_batch = org_clip(pred_batch)
+                    else: 
+                        pred_batch = clip(pred_batch)          
                     test_err2 = np.append(test_err2, np.power(pred_batch - rates, 2))
                 end = time.time()
                 test_err = np.sqrt(np.mean(test_err2))

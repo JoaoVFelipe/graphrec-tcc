@@ -132,7 +132,7 @@ def pre_process_dataset():
     df_ratings = pd.DataFrame(columns=['user', 'item', 'rate'], data=rows_list)
 
     ### Redução de dimensionalidade, se desejado
-    df_ratings_sample = reduce_dimensionality(df_ratings, USER_NUM, ITEM_NUM)
+    df_ratings_sample = df_ratings
     del df_ratings
 
     docs = df_ratings_sample['item'].unique()
@@ -141,29 +141,6 @@ def pre_process_dataset():
     ##df_ratings_complete = df_ratings_complete.iloc[0:0]
 
     print("Usuário e documentos finais:", users.size, docs.size)
-    # count = 0
-    # print("Adicionando itens não explicitos a matriz...")
-    ### Cria todas as conexões restantes não apresentadas no dataset inicial - Rate == 0
-    # NEGATIVE_RATIO = 50
-    # for ind in users:
-    #     count = 0
-    #     user_id = ind
-    #     user_ratings = list(map(int, df_ratings_sample.loc[df_ratings_sample['user'] == user_id, 'item']))
-    #     negative_docs = [doc for doc in docs if doc not in user_ratings]
-    #     # print("Process nr. ", count," ### User -- ", ind, "with", len(user_ratings), "items")
-    #     ### Adiciona todos os itens positivos a lista
-    #     for positive_doc in user_ratings:  
-    #         user_rating = [user_id, positive_doc, 1]
-    #         # print("Positive docs", positive_doc)
-    #         rows_list.append(user_rating)
-    #         ### Para cada item positivo, pega uma quantidade negativa baseado no ratio 1:NEGATIVE RATIO
-    #         random.seed(count)
-    #         negative_list = random.sample(negative_docs, NEGATIVE_RATIO)
-    #         # print("Negative docs", negative_list)
-    #         for negative_doc in negative_list:
-    #             negative_user_rating = [user_id, negative_doc, 0]
-    #             rows_list.append(negative_user_rating)
-    #         count = count+1
 
     ### Dataset completo
     print("Processamento completo. Criando dataframe com ", len(rows_list), " items.")
@@ -225,7 +202,7 @@ def grid_search():
     return  best_lr, best_ur, best_ir, best_mfsize
     
 ### Check if pre processed dataset is already saved
-preprocessed_path = 'preprocess/pre_processed_dataset-1000:5000.csv'
+preprocessed_path = 'preprocess/citeulike_pre_processed_dataset-1000:5000.csv'
 file_exists = exists(preprocessed_path)
 
 if(not file_exists):
@@ -254,13 +231,13 @@ for user in df_train['user'].unique():
     # Itens avaliados pelo usuário
     user_items = df_train[df_train['user'] == user]['item'].values
     # Itens que não foram avaliados pelo usuário
-    non_user_items = np.setdiff1d(docs, user_items)
+    non_user_items = list(set(docs).difference(user_items))
     
     # Para cada rating positivo do usuário
     for item in user_items:
         # Selecionar x itens não avaliados aleatoriamente
         sampled_negative_items = np.random.choice(non_user_items, size=NEGATIVE_RATIO, replace=False)
-        for neg_item in sampled_negative_items:
+        for neg_item in list(sampled_negative_items):
             negative_ratings.append({'user': user, 'item': neg_item, 'rate': 0})
 
 df_negative = pd.DataFrame(negative_ratings)
@@ -279,14 +256,13 @@ for user in df_test['user'].unique():
     # Itens avaliados pelo usuário
     user_items = df_test[df_test['user'] == user]['item'].values
     # Itens que não foram avaliados pelo usuário
-    non_user_items = np.setdiff1d(docs, user_items)
+    non_user_items = list(set(docs).difference(user_items))
     
     # Para cada rating positivo do usuário
     for item in user_items:
         # Selecionar x itens não avaliados aleatoriamente
         sampled_negative_items = np.random.choice(non_user_items, size=1, replace=False)
-        for neg_item in sampled_negative_items:
-            negative_ratings.append({'user': user, 'item': neg_item, 'rate': 0})
+        negative_ratings.append({'user': user, 'item': list(sampled_negative_items)[0], 'rate': 0})
 
 df_negative = pd.DataFrame(negative_ratings)
 # Combinar os ratings positivos e negativos
